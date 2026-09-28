@@ -1,1 +1,199 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Yamato</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;color:#111;background:#fff}button,input,textarea{font:inherit}button{cursor:pointer;border:0}
+.top{height:64px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:18px;padding:0 20px;position:sticky;top:0;background:#fff;z-index:5}.logo{font-size:25px;font-weight:900}.logo i{color:#ff3158;font-style:normal}.search{display:flex;max-width:620px;flex:1;margin:auto;background:#f6f7f9;border:1px solid #eee;border-radius:999px;padding:4px}.search input{flex:1;border:0;outline:0;background:transparent;padding:8px 14px}.search button,.primary{background:#111;color:#fff;border-radius:999px;padding:10px 17px}.ghost{background:#f5f6f8;border-radius:999px;padding:10px 15px}.layout{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 64px)}aside{border-right:1px solid #eee;padding:15px 10px;position:sticky;top:64px;height:calc(100vh - 64px)}.nav{display:block;width:100%;text-align:left;background:transparent;padding:12px 14px;border-radius:12px}.nav:hover,.nav.active{background:#f5f6f8;font-weight:700}.main{max-width:1200px;width:100%;margin:auto;padding:25px}.hero{margin-bottom:22px}.hero h1{margin:0;font-size:31px}.muted{color:#69707d}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}.thumb{aspect-ratio:16/9;background:#eee;border-radius:14px;overflow:hidden}.thumb img{width:100%;height:100%;object-fit:cover}.title{font-weight:750;margin-top:9px}.meta{font-size:14px;color:#69707d;margin-top:5px}.modal{position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center;padding:18px;z-index:10}.modal.open{display:flex}.box{background:#fff;border-radius:20px;padding:23px;width:min(650px,100%)}.field{margin:13px 0}.field label{display:block;font-weight:700;font-size:13px;margin-bottom:6px}.field input,.field textarea{width:100%;padding:12px;border:1px solid #ddd;border-radius:11px;background:#fafafa}.field textarea{min-height:90px}.row{display:flex;gap:10px;justify-content:flex-end}.watch{max-width:900px;margin:auto}.player{width:100%;max-height:70vh;background:#000;border-radius:16px}.actions{margin:12px 0}.like{background:#f5f6f8;border-radius:999px;padding:10px 16px}.like.on{background:#ffe7ec;color:#d51f45}.empty{text-align:center;padding:70px 20px;border:1px dashed #ddd;border-radius:18px}.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:11px 17px;border-radius:999px;display:none;z-index:20}.toast.show{display:block}
+@media(max-width:850px){.layout{grid-template-columns:70px 1fr}.nav{font-size:0;text-align:center}.nav:first-letter{font-size:20px}.grid{grid-template-columns:repeat(2,1fr)}.main{padding:18px 14px}.search{display:none}}
+@media(max-width:580px){.grid{grid-template-columns:1fr}.top{padding:0 12px}.logo{font-size:22px}}
+</style></head><body>
 
+<header class="top">
+<div class="logo">Yama<i>to</i></div>
+<div class="search"><input id="q" placeholder="Suchen..."><button onclick="render()">Suchen</button></div>
+<button class="ghost" onclick="authOpen()">Anmelden</button>
+<button class="primary" onclick="uploadOpen()">＋ Hochladen</button>
+</header>
+
+<div class="layout">
+<aside>
+<button class="nav active" onclick="render()">🏠 Startseite</button>
+<button class="nav" onclick="render()">🔥 Beliebt</button>
+<button class="nav" onclick="authOpen()">👤 Mein Konto</button>
+<button class="nav" onclick="uploadOpen()">⬆️ Video hochladen</button>
+</aside>
+<main class="main" id="main"></main>
+</div>
+
+<div class="modal" id="auth">
+<div class="box">
+<h2 id="authH">Yamato-Konto</h2>
+<div class="field"><label>Username</label><input id="user"></div>
+<div class="field"><label>Passwort</label><input id="pass" type="password"></div>
+<div class="row">
+<button class="ghost" onclick="closeM('auth')">Abbrechen</button>
+<button class="primary" onclick="authGo()">Anmelden</button>
+</div>
+<p class="muted">Noch kein Konto? <button style="background:none;text-decoration:underline" onclick="toggle()">Registrieren</button></p>
+</div>
+</div>
+
+<div class="modal" id="upload">
+<div class="box">
+<h2>Video hochladen</h2>
+<div class="field"><label>Titel</label><input id="vt" maxlength="100"></div>
+<div class="field"><label>Beschreibung</label><textarea id="vd" maxlength="1000"></textarea></div>
+<div class="field"><label>Thumbnail</label><input id="thumb" type="file" accept="image/png,image/jpeg,image/webp"></div>
+<div class="field"><label>Videodatei</label><input id="vid" type="file" accept="video/mp4,video/webm,video/quicktime"></div>
+<div class="row">
+<button class="ghost" onclick="closeM('upload')">Abbrechen</button>
+<button class="primary" onclick="send()">Hochladen</button>
+</div>
+<p class="muted">Max. 300 MB in dieser ersten Version.</p>
+</div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let token=localStorage.getItem("ytok")||"",vids=[],mode="login";
+const $=id=>document.getElementById(id),
+esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+
+async function api(u,o={}){
+o.headers=o.headers||{};
+if(token)o.headers.Authorization="Bearer "+token;
+let r=await fetch(u,o),d=await r.json().catch(()=>({}));
+if(!r.ok)throw Error(d.error||"Fehler");
+return d
+}
+
+function toast(x){
+$("toast").textContent=x;
+$("toast").classList.add("show");
+setTimeout(()=>$("toast").classList.remove("show"),2200)
+}
+
+function closeM(x){$(x).classList.remove("open")}
+function authOpen(){$("auth").classList.add("open")}
+
+function uploadOpen(){
+if(!token){authOpen();toast("Erst anmelden.");return}
+$("upload").classList.add("open")
+}
+
+function toggle(){
+mode=mode==="login"?"register":"login";
+$("authH").textContent=mode==="login"?"Yamato-Konto":"Konto erstellen";
+$("auth").querySelector(".primary").textContent=mode==="login"?"Anmelden":"Registrieren"
+}
+
+async function authGo(){
+try{
+let d=await api(mode==="login"?"/api/login":"/api/register",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({
+username:$("user").value,
+password:$("pass").value
+})
+});
+token=d.token;
+localStorage.setItem("ytok",token);
+closeM("auth");
+toast("Willkommen bei Yamato 👋")
+}catch(e){toast(e.message)}
+}
+
+async function send(){
+let f=$("vid").files[0],t=$("thumb").files[0];
+if(!f||!t)return toast("Video und Thumbnail auswählen.");
+let fd=new FormData();
+fd.append("title",$("vt").value);
+fd.append("description",$("vd").value);
+fd.append("video",f);
+fd.append("thumbnail",t);
+
+try{
+await api("/api/videos",{method:"POST",body:fd});
+closeM("upload");
+$("vt").value="";
+$("vd").value="";
+$("vid").value="";
+$("thumb").value="";
+toast("Video ist auf der Startseite! 🔥");
+load()
+}catch(e){toast(e.message)}
+}
+
+async function load(){
+try{
+vids=await api("/api/videos");
+render()
+}catch(e){toast(e.message)}
+}
+
+function render(){
+let q=($("q").value||"").toLowerCase(),
+a=vids.filter(v=>(v.title+" "+v.author).toLowerCase().includes(q));
+
+$("main").innerHTML=`
+<div class="hero">
+<h1>Startseite</h1>
+<div class="muted">Neue Videos von der Yamato-Community.</div>
+</div>
+
+<div class="grid">
+${a.length?a.map(v=>`
+<article onclick="watch('${v.id}')">
+<div class="thumb"><img src="${v.thumbnail}"></div>
+<div class="title">${esc(v.title)}</div>
+<div class="meta">${esc(v.author)} · ${v.views} Aufrufe · ${v.likes} Likes</div>
+</article>
+`).join(""):`
+<div class="empty" style="grid-column:1/-1">
+🎬
+<h2>Noch keine Videos</h2>
+<p>Lade das erste Yamato-Video hoch.</p>
+</div>
+`}
+</div>`
+}
+
+function watch(id){
+let v=vids.find(x=>x.id===id);
+
+$("main").innerHTML=`
+<div class="watch">
+<button class="ghost" onclick="render()">← Zurück</button>
+<video class="player" src="${v.video}" controls autoplay onplay="view('${id}')"></video>
+<h1>${esc(v.title)}</h1>
+<div class="muted">${esc(v.author)} · ${v.views} Aufrufe</div>
+<div class="actions">
+<button id="lb" class="like" onclick="like('${id}')">♡ ${v.likes}</button>
+</div>
+<p>${esc(v.description)}</p>
+</div>`
+}
+
+async function view(id){
+try{
+let d=await api("/api/videos/"+id+"/view",{method:"POST"});
+let v=vids.find(x=>x.id===id);
+v.views=d.views
+}catch{}
+}
+
+async function like(id){
+if(!token)return authOpen();
+
+try{
+let d=await api("/api/videos/"+id+"/like",{method:"POST"});
+let v=vids.find(x=>x.id===id);
+v.likes=d.likes;
+$("lb").textContent=(d.liked?"♥ ":"♡ ")+d.likes;
+$("lb").classList.toggle("on",d.liked)
+}catch(e){toast(e.message)}
+}
+
+load();
+</script>
+</body></html>
